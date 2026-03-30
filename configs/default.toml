@@ -1,0 +1,62 @@
+# DUSTY Default Configuration
+
+[agent]
+name = "DUSTY"
+personality = "philosopher"
+wake_word = "hey dusty"
+max_history = 50
+
+[inference]
+mode = "local"  # "local", "cloud", "auto"
+
+[inference.local]
+provider = "ollama"
+model = "gemma3:1b"
+endpoint = "http://localhost:11434"
+
+[inference.cloud]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+# API key loaded from env: ANTHROPIC_API_KEY
+
+[audio]
+sample_rate = 16000
+channels = 1
+# input_device = ""   # leave empty for system default
+# output_device = ""  # leave empty for system default
+vad_threshold = 0.02
+silence_ms = 800
+max_segment_sec = 30
+
+[stt]
+engine = "whisper"
+model = "base"  # tiny, base, small
+language = "en"
+
+[tts]
+engine = "piper"
+default_voice = "philosopher"
+piper_bin = "piper"  # must be on PATH or set to absolute path, e.g. "bin/piper"
+
+[tts.voices.philosopher]
+model = "assets/voices/en_US-lessac-medium.onnx"
+speaking_rate = 0.95
+description = "Warm, contemplative voice for deep conversations"
+
+[tts.voices.robot]
+model = "assets/voices/en_US-ryan-medium.onnx"
+speaking_rate = 1.0
+description = "Crisp, slightly robotic delivery"
+
+[display]
+mode = "tui"  # "tui", "visual", "both"
+theme = "phosphor-green"  # "phosphor-green", "amber", "blue", "custom"
+
+[display.visual]
+resolution = [256, 256]
+palette = "16-retro"
+crt_shader = true
+
+[memory]
+persist = true
+path = "dusty.memory.json"

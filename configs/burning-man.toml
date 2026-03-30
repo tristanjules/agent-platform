@@ -1,0 +1,55 @@
+# DUSTY Burning Man Configuration
+# Fully offline, power-conscious settings
+
+[agent]
+name = "DUSTY"
+personality = "philosopher"
+wake_word = "hey dusty"
+max_history = 30  # Smaller history to save memory
+
+[inference]
+mode = "local"  # Offline only — no cloud fallback
+
+[inference.local]
+provider = "ollama"
+model = "gemma3:1b"  # Best efficiency/quality ratio on Pi 5
+endpoint = "http://localhost:11434"
+
+[inference.cloud]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+
+[audio]
+sample_rate = 16000
+channels = 1
+vad_threshold = 0.025  # Slightly higher threshold for noisy playa environment
+silence_ms = 1000       # Longer silence timeout — noisy environments have gaps
+max_segment_sec = 30
+
+[stt]
+engine = "whisper"
+model = "tiny"  # Faster, less CPU for battery life
+language = "en"
+
+[tts]
+engine = "piper"
+default_voice = "philosopher"
+piper_bin = "piper"
+
+[tts.voices.philosopher]
+model = "assets/voices/en_US-lessac-medium.onnx"
+speaking_rate = 0.95
+description = "Warm, contemplative voice for deep conversations"
+
+[display]
+mode = "tui"
+theme = "phosphor-green"
+
+[display.visual]
+resolution = [128, 128]  # Lower res for power saving
+palette = "16-retro"
+crt_shader = false  # Save GPU cycles
+
+[memory]
+persist = true
+path = "dusty.memory.json"
