@@ -27,6 +27,11 @@ type App struct {
 	input        InputComponent
 	settings     SettingsOverlay
 	commands     CommandHandler
+	transmission TransmissionOverlay
+
+	// Mesh peer registry for resolving node names in notifications.
+	// Nil when mesh is disabled.
+	meshRegistry meshPeerLookup
 
 	// Layout state
 	theme        Theme
@@ -58,6 +63,7 @@ func NewApp(
 		input:        NewInputComponent(theme),
 		settings:     NewSettingsOverlay(a, cfg, theme),
 		commands:     NewCommandHandler(a, cfg, voice),
+		transmission: NewTransmissionOverlay(theme),
 		theme:        theme,
 		agentState:   a.State(),
 	}
@@ -85,6 +91,22 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleSubmit(msg.Text)
 
 	case tea.KeyPressMsg:
+		// Transmission overlay absorbs Enter and Esc when visible.
+		if m.transmission.Visible() {
+			switch msg.String() {
+			case "enter":
+				accepted := m.transmission.Accept()
+				m.conversation.AddSystemMessage(
+					m.theme.Primary.Render(">>> TRANSMISSION ACCEPTED <<<") +
+						"\n" + accepted.Value)
+			case "esc":
+				m.transmission.Dismiss()
+				m.conversation.AddSystemMessage(
+					m.theme.Dimmed.Render("[transmission dismissed]"))
+			}
+			return m, nil
+		}
+
 		// Settings overlay absorbs all keys when visible.
 		if m.settings.Visible() {
 			result := m.settings.Update(msg)
@@ -172,6 +194,15 @@ func (m App) handleEvent(ev state.Event) App {
 
 	case state.EventSTTResult, state.EventTTSStarted, state.EventTTSDone:
 		m.reasoning.HandleEvent(ev)
+
+	case state.EventNotificationTriggered, state.EventMeshNodeDiscovered, state.EventMeshNodeLost:
+		showOverlay, sysMsg := HandleTransmissionEvent(ev, &m.transmission, m.meshRegistry)
+		if showOverlay {
+			m.transmission.SetWidth(m.width)
+		}
+		if sysMsg != "" {
+			m.conversation.AddSystemMessage(sysMsg)
+		}
 	}
 	return m
 }
@@ -285,6 +316,11 @@ func (m App) View() tea.View {
 	if m.settings.Visible() {
 		// Append settings view below the main UI (simple approach for now).
 		content += "\n" + m.settings.View()
+	}
+
+	// Overlay transmission banner if visible.
+	if m.transmission.Visible() {
+		content += "\n" + m.transmission.View()
 	}
 
 	v := tea.NewView(content)

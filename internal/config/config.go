@@ -12,6 +12,7 @@ type Config struct {
 	TTS       TTSConfig       `toml:"tts"`
 	Display   DisplayConfig   `toml:"display"`
 	Memory    MemoryConfig    `toml:"memory"`
+	Mesh      MeshConfig      `toml:"mesh"`
 }
 
 // AgentConfig controls the agent's identity and behavior.
@@ -96,6 +97,31 @@ type MemoryConfig struct {
 	Path    string `toml:"path"`
 }
 
+// MeshConfig configures the LoRa mesh communication subsystem.
+type MeshConfig struct {
+	Enabled           bool    `toml:"enabled"`
+	SerialPort        string  `toml:"serial_port"`        // e.g. /dev/ttyUSB0
+	BaudRate          int     `toml:"baud_rate"`          // default 115200
+	NodeID            string  `toml:"node_id"`            // This node's Meshtastic node ID, e.g. !abcd1234
+	AgentName         string  `toml:"agent_name"`         // Name announced in discovery (defaults to agent.name)
+	PSK               string  `toml:"psk"`                // AES-256 pre-shared key (hex) for encrypted channel
+	HeartbeatInterval string  `toml:"heartbeat_interval"` // e.g. "5m"
+	DiscoveryTimeout  string  `toml:"discovery_timeout"`  // e.g. "30s"
+	PeerTTL           string  `toml:"peer_ttl"`           // e.g. "30m"
+	QueueSize         int     `toml:"queue_size"`         // Outbound message queue depth (default 16)
+	RateLimitSecs     int     `toml:"rate_limit_secs"`    // Min seconds between sends (default 30)
+	IdleTimeoutMins   int     `toml:"idle_timeout_mins"`  // Minutes before user considered idle (default 5)
+	MessageRetention  int     `toml:"message_retention"`  // Max stored messages (default 200)
+	InteractionLimit  int     `toml:"interaction_limit"`  // Max interactions per peer (default 100)
+	PeersFile         string  `toml:"peers_file"`         // default mesh-peers.json
+	PeerMemoryFile    string  `toml:"peer_memory_file"`   // default mesh-peer-memory.json
+	MessagesFile      string  `toml:"messages_file"`      // default mesh-messages.json
+	SoundFile         string  `toml:"sound_file"`         // default assets/sounds/transmission.wav
+	// GPS stub configuration.
+	GPSLat float64 `toml:"gps_lat"`
+	GPSLon float64 `toml:"gps_lon"`
+}
+
 // Defaults returns a Config populated with sensible default values.
 func Defaults() Config {
 	return Config{
@@ -146,6 +172,23 @@ func Defaults() Config {
 		Memory: MemoryConfig{
 			Persist: true,
 			Path:    "dusty.memory.json",
+		},
+		Mesh: MeshConfig{
+			Enabled:           false,
+			SerialPort:        "/dev/ttyUSB0",
+			BaudRate:          115200,
+			HeartbeatInterval: "5m",
+			DiscoveryTimeout:  "30s",
+			PeerTTL:           "30m",
+			QueueSize:         16,
+			RateLimitSecs:     30,
+			IdleTimeoutMins:   5,
+			MessageRetention:  200,
+			InteractionLimit:  100,
+			PeersFile:         "mesh-peers.json",
+			PeerMemoryFile:    "mesh-peer-memory.json",
+			MessagesFile:      "mesh-messages.json",
+			SoundFile:         "assets/sounds/transmission.wav",
 		},
 	}
 }

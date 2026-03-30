@@ -23,9 +23,16 @@ func (t TimeTool) Execute(_ map[string]any) (string, error) {
 	return fmt.Sprintf("Current time: %s", time.Now().Format(time.RFC1123)), nil
 }
 
+// MeshTools is an optional set of mesh communication tools. Non-nil when
+// mesh is enabled in config. Injected by the mesh subsystem at startup.
+var MeshTools []Tool
+
 // DefaultTools returns the set of tools available to the agent.
+// Mesh tools are appended when the mesh subsystem is enabled.
 func DefaultTools() []Tool {
-	return []Tool{
+	tools := []Tool{
 		TimeTool{},
 	}
+	tools = append(tools, MeshTools...)
+	return tools
 }

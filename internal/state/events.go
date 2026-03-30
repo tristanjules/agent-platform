@@ -28,6 +28,12 @@ const (
 
 	// Wake word events (Phase 5).
 	EventWakeWordDetected
+
+	// Mesh communication events.
+	EventMeshMessageReceived  // Incoming mesh message from a peer.
+	EventMeshNodeDiscovered   // New peer seen for the first time.
+	EventMeshNodeLost         // Peer has gone stale (TTL expired).
+	EventNotificationTriggered // Notification sound/haptic fired.
 )
 
 // String returns a human-readable name for the event type.
@@ -43,6 +49,10 @@ func (et EventType) String() string {
 		"TTSStarted",
 		"TTSDone",
 		"WakeWordDetected",
+		"MeshMessageReceived",
+		"MeshNodeDiscovered",
+		"MeshNodeLost",
+		"NotificationTriggered",
 	}
 	if int(et) < len(names) {
 		return names[et]
