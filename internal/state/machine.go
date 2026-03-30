@@ -9,13 +9,14 @@ import (
 type AgentState int
 
 const (
-	StateIdle       AgentState = iota
-	StateListening             // Microphone active, capturing audio.
-	StateProcessing            // STT running on captured audio.
-	StateThinking              // LLM generating a response.
-	StateSpeaking              // TTS playing audio output.
-	StateError                 // Recoverable error state.
-	StateWarmup                // System initializing.
+	StateIdle                    AgentState = iota
+	StateListening                          // Microphone active, capturing audio.
+	StateProcessing                         // STT running on captured audio.
+	StateThinking                           // LLM generating a response.
+	StateSpeaking                           // TTS playing audio output.
+	StateError                              // Recoverable error state.
+	StateWarmup                             // System initializing.
+	StateReceivingTransmission              // Mesh message interrupt — awaiting user accept/dismiss.
 )
 
 // String returns a human-readable name for the state.
@@ -28,6 +29,7 @@ func (s AgentState) String() string {
 		"Speaking",
 		"Error",
 		"Warmup",
+		"ReceivingTransmission",
 	}
 	if int(s) < len(names) {
 		return names[s]
@@ -72,6 +74,19 @@ var validTransitions = map[AgentState]map[AgentState]bool{
 		StateIdle:   true,
 		StateWarmup: true,
 	},
+	// ReceivingTransmission is valid from Idle and Processing.
+	// Return transitions (dismiss/accept) go back to Idle or Processing
+	// depending on what was interrupted — callers track prior state.
+	StateReceivingTransmission: {
+		StateIdle:       true,
+		StateProcessing: true,
+	},
+}
+
+func init() {
+	// Allow transitioning INTO StateReceivingTransmission from Idle and Processing.
+	validTransitions[StateIdle][StateReceivingTransmission] = true
+	validTransitions[StateProcessing][StateReceivingTransmission] = true
 }
 
 // StateTransition records a state change.

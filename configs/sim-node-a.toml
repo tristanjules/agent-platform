@@ -1,0 +1,55 @@
+# DUSTY Sim Node A — local mesh development config.
+# Pair with sim-node-b.toml and a running mesh-sim hub.
+#
+# Usage:
+#   Terminal 1: go run ./cmd/mesh-sim
+#   Terminal 2: go run ./cmd/dusty --headless --config configs/sim-node-a.toml
+#   Terminal 3: go run ./cmd/dusty --headless --config configs/sim-node-b.toml
+
+[agent]
+name = "DUSTY-A"
+personality = "philosopher"
+wake_word = "hey dusty"
+max_history = 30
+
+[inference]
+mode = "local"
+
+[inference.local]
+provider = "ollama"
+model = "gemma3:1b"
+endpoint = "http://localhost:11434"
+
+[inference.cloud]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+
+[memory]
+persist = false   # no persistence between sim runs
+
+[mesh]
+enabled = true
+serial_port = "sim://localhost:9090"   # connects to mesh-sim hub
+baud_rate = 115200
+node_id = "!aaaaaaaa"
+agent_name = "DUSTY-A"
+owner_name = "Tristan"
+psk = ""                               # no encryption in sim mode
+
+heartbeat_interval = "10s"            # fast for testing
+discovery_timeout  = "5s"
+peer_ttl           = "5m"
+queue_size         = 16
+rate_limit_secs    = 1                 # 1s rate limit (fast for testing)
+idle_timeout_mins  = 1
+
+message_retention  = 50
+interaction_limit  = 20
+
+peers_file        = "/tmp/dusty-sim-a-peers.json"
+peer_memory_file  = "/tmp/dusty-sim-a-memory.json"
+messages_file     = "/tmp/dusty-sim-a-messages.json"
+sound_file        = ""
+
+gps_lat = -32.3279
+gps_lon = 19.7485

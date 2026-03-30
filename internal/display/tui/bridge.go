@@ -28,6 +28,11 @@ func StartBridge(bus *state.EventBus, p *tea.Program) {
 		state.EventSTTResult,
 		state.EventTTSStarted,
 		state.EventTTSDone,
+		// Mesh communication events.
+		state.EventMeshMessageReceived,
+		state.EventMeshNodeDiscovered,
+		state.EventMeshNodeLost,
+		state.EventNotificationTriggered,
 	}
 
 	for _, et := range eventTypes {
