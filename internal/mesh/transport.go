@@ -296,8 +296,13 @@ func (t *Transport) reconnect() {
 	}
 }
 
-// openRealSerial opens a real serial port using go.bug.st/serial.
+// openRealSerial opens a real serial port, or a sim:// hub connection.
+// If path starts with "sim://" (e.g. "sim://localhost:9090") it connects
+// to a mesh-sim hub instead of opening a real serial device.
 func openRealSerial(path string, baud int) (SerialPort, error) {
+	if addr, ok := isSimAddr(path); ok {
+		return openSimPort(addr)
+	}
 	mode := &serial.Mode{BaudRate: baud}
 	port, err := serial.Open(path, mode)
 	if err != nil {

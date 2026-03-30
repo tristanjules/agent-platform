@@ -144,28 +144,80 @@ func (h CommandHandler) Handle(input string) CommandResult {
 			return CommandResult{Output: fmt.Sprintf("Voice: %s\nUsage: /voice start|stop", status)}
 		}
 
-	case "/help":
-		return CommandResult{
-			Output: strings.Join([]string{
-				"Commands:",
-				"  /clear           — Clear conversation memory",
-				"  /persona <name>  — Switch persona (philosopher, companion, minimal)",
-				"  /model [name]    — List or switch local model",
-				"  /mode <mode>     — Switch routing: local, cloud, auto",
-				"  /status          — Show agent status",
-				"  /voice start     — Start voice mode",
-				"  /voice stop      — Stop voice mode",
-				"  /quit            — Exit (saves memory)",
-				"",
-				"Keyboard shortcuts:",
-				"  F1               — Toggle voice mode",
-				"  F2               — Settings panel",
-				"  Ctrl+L           — Clear memory",
-				"  Ctrl+C           — Quit",
-			}, "\n"),
+	case "/send":
+		tool := findAgentTool("mesh_send")
+		if tool == nil {
+			return CommandResult{Output: "[mesh not enabled]"}
 		}
+		if len(parts) < 3 {
+			return CommandResult{Output: "Usage: /send <target> <message>"}
+		}
+		target := parts[1]
+		message := strings.Join(parts[2:], " ")
+		result, err := tool.Execute(map[string]any{"target": target, "message": message})
+		if err != nil {
+			return CommandResult{Output: fmt.Sprintf("[mesh error] %v", err)}
+		}
+		return CommandResult{Output: fmt.Sprintf("[mesh] %s", result)}
+
+	case "/inbox":
+		tool := findAgentTool("mesh_inbox")
+		if tool == nil {
+			return CommandResult{Output: "[mesh not enabled]"}
+		}
+		args := map[string]any{"action": "unread"}
+		if len(parts) >= 2 {
+			args["action"] = parts[1]
+		}
+		for _, kv := range parts[2:] {
+			if idx := strings.IndexByte(kv, '='); idx > 0 {
+				args[kv[:idx]] = kv[idx+1:]
+			}
+		}
+		result, err := tool.Execute(args)
+		if err != nil {
+			return CommandResult{Output: fmt.Sprintf("[mesh error] %v", err)}
+		}
+		return CommandResult{Output: result}
+
+	case "/help":
+		lines := []string{
+			"Commands:",
+			"  /clear              — Clear conversation memory",
+			"  /persona <name>     — Switch persona (philosopher, companion, minimal)",
+			"  /model [name]       — List or switch local model",
+			"  /mode <mode>        — Switch routing: local, cloud, auto",
+			"  /status             — Show agent status",
+			"  /voice start|stop   — Toggle voice mode",
+		}
+		if findAgentTool("mesh_send") != nil {
+			lines = append(lines,
+				"  /send <target> <msg> — Send mesh transmission",
+				"  /inbox [action]      — Mesh inbox (unread, history, peers, peer_facts, replay)",
+			)
+		}
+		lines = append(lines,
+			"  /quit               — Exit (saves memory)",
+			"",
+			"Keyboard shortcuts:",
+			"  F1                  — Toggle voice mode",
+			"  F2                  — Settings panel",
+			"  Ctrl+L              — Clear memory",
+			"  Ctrl+C              — Quit",
+		)
+		return CommandResult{Output: strings.Join(lines, "\n")}
 
 	default:
 		return CommandResult{Output: fmt.Sprintf("Unknown command: %s (try /help)", cmd)}
 	}
+}
+
+// findAgentTool looks up a named tool from agent.MeshTools.
+func findAgentTool(name string) agent.Tool {
+	for _, t := range agent.MeshTools {
+		if t.Name() == name {
+			return t
+		}
+	}
+	return nil
 }

@@ -104,6 +104,7 @@ type MeshConfig struct {
 	BaudRate          int     `toml:"baud_rate"`          // default 115200
 	NodeID            string  `toml:"node_id"`            // This node's Meshtastic node ID, e.g. !abcd1234
 	AgentName         string  `toml:"agent_name"`         // Name announced in discovery (defaults to agent.name)
+	OwnerName         string  `toml:"owner_name"`         // Human owner name announced in discovery
 	PSK               string  `toml:"psk"`                // AES-256 pre-shared key (hex) for encrypted channel
 	HeartbeatInterval string  `toml:"heartbeat_interval"` // e.g. "5m"
 	DiscoveryTimeout  string  `toml:"discovery_timeout"`  // e.g. "30s"

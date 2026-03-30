@@ -10,6 +10,11 @@ import (
 	"github.com/tristanj/dusty/internal/state"
 )
 
+// messageStorer is the subset of mesh.MessageStore needed by Notifier.
+type messageStorer interface {
+	StoreReceived(msg mesh.MeshMessage)
+}
+
 // NotificationPayload is the payload for EventNotificationTriggered.
 type NotificationPayload struct {
 	Message mesh.MeshMessage
@@ -23,6 +28,7 @@ type Notifier struct {
 	bus         *state.EventBus
 	sound       SoundPlayer
 	haptic      haptic.HapticProvider
+	store       messageStorer
 	soundPath   string
 	IdleTimeout time.Duration
 
@@ -35,8 +41,8 @@ type NotifierConfig struct {
 	IdleTimeout time.Duration // Default 5 minutes.
 }
 
-// NewNotifier creates a Notifier.
-func NewNotifier(cfg NotifierConfig, bus *state.EventBus, sound SoundPlayer, hap haptic.HapticProvider) *Notifier {
+// NewNotifier creates a Notifier. store may be nil (messages are not persisted).
+func NewNotifier(cfg NotifierConfig, bus *state.EventBus, sound SoundPlayer, hap haptic.HapticProvider, store messageStorer) *Notifier {
 	if cfg.IdleTimeout == 0 {
 		cfg.IdleTimeout = 5 * time.Minute
 	}
@@ -44,6 +50,7 @@ func NewNotifier(cfg NotifierConfig, bus *state.EventBus, sound SoundPlayer, hap
 		bus:         bus,
 		sound:       sound,
 		haptic:      hap,
+		store:       store,
 		soundPath:   cfg.SoundPath,
 		IdleTimeout: cfg.IdleTimeout,
 	}
@@ -102,6 +109,10 @@ func (n *Notifier) Start(stopCh <-chan struct{}) {
 					return
 				}
 				if msg, ok := evt.Payload.(mesh.MeshMessage); ok {
+					// Persist to inbox before notifying.
+					if n.store != nil {
+						n.store.StoreReceived(msg)
+					}
 					n.Notify(msg)
 				}
 			case <-stopCh:

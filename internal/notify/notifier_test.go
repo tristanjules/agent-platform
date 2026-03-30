@@ -26,7 +26,7 @@ func newTestNotifier(t *testing.T, idleTimeout time.Duration) (*notify.Notifier,
 	n := notify.NewNotifier(notify.NotifierConfig{
 		SoundPath:   "test.wav",
 		IdleTimeout: idleTimeout,
-	}, bus, sound, hap)
+	}, bus, sound, hap, nil)
 	return n, bus, sound
 }
 

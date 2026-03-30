@@ -60,3 +60,57 @@ crt_shader = true
 [memory]
 persist = true
 path = "dusty.memory.json"
+
+# ─── Mesh Communications (LoRa / Meshtastic) ─────────────────────────────────
+# Requires a Meshtastic-compatible LoRa node (e.g. LILYGO T-Beam) connected
+# via USB serial. Set enabled = true and configure your node_id + psk.
+[mesh]
+enabled = false
+serial_port = "/dev/ttyUSB0"        # USB serial port of the LoRa node
+baud_rate = 115200
+
+# Your Meshtastic node ID, e.g. "!abcd1234"
+node_id = ""
+
+# Name announced to peer agents during discovery (defaults to agent.name if empty)
+agent_name = ""
+owner_name = ""  # Human owner name broadcast in discovery heartbeats
+
+# AES-256 pre-shared key (hex) for the encrypted Meshtastic channel.
+# Must match on all nodes in the mesh.
+psk = ""
+
+# How often to broadcast a heartbeat to keep peers aware of this node.
+heartbeat_interval = "5m"
+
+# How long to wait for peer responses during startup discovery.
+discovery_timeout = "30s"
+
+# How long before a peer with no heartbeat is considered lost.
+peer_ttl = "30m"
+
+# Outbound message queue depth. Messages are dropped (oldest first) when full.
+queue_size = 16
+
+# Minimum seconds between outbound transmissions (LoRa duty-cycle protection).
+rate_limit_secs = 30
+
+# Minutes of user inactivity before overlay is suppressed and messages queued silently.
+idle_timeout_mins = 5
+
+# Maximum number of messages to retain in the persistent inbox.
+message_retention = 200
+
+# Maximum interaction history entries to store per peer.
+interaction_limit = 100
+
+# Persistent state files.
+peers_file         = "mesh-peers.json"
+peer_memory_file   = "mesh-peer-memory.json"
+messages_file      = "mesh-messages.json"
+sound_file         = "assets/sounds/transmission.wav"
+
+# GPS stub: fixed coordinates broadcast in heartbeats (decimal degrees).
+# Leave at 0.0 if you have no GPS fix.
+gps_lat = 0.0
+gps_lon = 0.0

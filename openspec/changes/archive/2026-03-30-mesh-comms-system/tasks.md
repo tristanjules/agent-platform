@@ -58,7 +58,7 @@
 - [x] 7.4 Implement status transitions: `MarkRead(id)`, `MarkDismissed(id)` with valid transition enforcement (unread→read, unread→dismissed, dismissed→read)
 - [x] 7.5 Implement outbound message storage: store sent messages with status `sent` and sentAt timestamp
 - [x] 7.6 Implement configurable retention limit (default 200): prune oldest read first, then dismissed, never prune unread
-- [ ] 7.7 Wire message store into receive loop (auto-store on `EventMeshMessageReceived`) and send path (store on `mesh_send` enqueue)
+- [x] 7.7 Wire message store into receive loop (auto-store on `EventMeshMessageReceived`) and send path (store on `mesh_send` enqueue)
 - [x] 7.8 Write tests for status transitions, query methods, retention pruning, and persistence round-trip
 
 ## 8. Mesh Send Tool
@@ -84,41 +84,41 @@
 
 ## 10. Notification System
 
-- [ ] 10.1 Create `internal/notify/notifier.go` with `Notifier` struct that orchestrates sound + haptic + event publishing on incoming mesh messages
-- [ ] 10.2 Create `internal/notify/sound.go` with sound playback via existing audio subsystem, falling back to terminal bell (`\a`)
-- [ ] 10.3 Add `assets/sounds/transmission.wav` notification sound file
-- [ ] 10.4 Subscribe `Notifier` to `EventMeshMessageReceived` on the event bus and trigger notification sequence
-- [ ] 10.5 Implement idle detection (no user input for configurable period, default 5 min) — suppress overlay when idle, store messages as unread silently
-- [ ] 10.6 Write tests for notification orchestration (mock sound + haptic providers) and idle suppression logic
+- [x] 10.1 Create `internal/notify/notifier.go` with `Notifier` struct that orchestrates sound + haptic + event publishing on incoming mesh messages
+- [x] 10.2 Create `internal/notify/sound.go` with sound playback via existing audio subsystem, falling back to terminal bell (`\a`)
+- [x] 10.3 Add `assets/sounds/transmission.wav` notification sound file
+- [x] 10.4 Subscribe `Notifier` to `EventMeshMessageReceived` on the event bus and trigger notification sequence
+- [x] 10.5 Implement idle detection (no user input for configurable period, default 5 min) — suppress overlay when idle, store messages as unread silently
+- [x] 10.6 Write tests for notification orchestration (mock sound + haptic providers) and idle suppression logic
 
 ## 11. TUI Integration — Transmission Overlay & Unread Queue
 
-- [ ] 11.1 Create transmission overlay component in `internal/display/tui/` — full-width retro sci-fi ">>> INCOMING TRANSMISSION <<<" banner with sender info and accept/dismiss keybindings
-- [ ] 11.2 Wire `EventMeshMessageReceived` into the TUI event bridge (`bridge.go`) to trigger the overlay
-- [ ] 11.3 Implement accept flow: display message in conversation pane, mark as read in message store, trigger TTS if available, return to previous state
-- [ ] 11.4 Implement dismiss flow: close overlay, mark as dismissed in message store, return to previous state
-- [ ] 11.5 Implement unread banner on activity resume: "⚡ N unread transmissions from <senders> [R] Review [C] Continue"
-- [ ] 11.6 Implement review flow: present unread messages one at a time chronologically with accept/dismiss per message
-- [ ] 11.7 Add subtle system messages for `EventMeshNodeDiscovered` ("entered mesh range") and `EventMeshNodeLost` ("signal lost") in conversation pane
-- [ ] 11.8 Write tests for overlay rendering, accept/dismiss state transitions, and unread banner flow
+- [x] 11.1 Create transmission overlay component in `internal/display/tui/` — full-width retro sci-fi ">>> INCOMING TRANSMISSION <<<" banner with sender info and accept/dismiss keybindings
+- [x] 11.2 Wire `EventMeshMessageReceived` into the TUI event bridge (`bridge.go`) to trigger the overlay
+- [x] 11.3 Implement accept flow: display message in conversation pane, mark as read in message store, trigger TTS if available, return to previous state
+- [x] 11.4 Implement dismiss flow: close overlay, mark as dismissed in message store, return to previous state
+- [x] 11.5 Implement unread banner on activity resume: "⚡ N unread transmissions from <senders> [R] Review [C] Continue"
+- [x] 11.6 Implement review flow: present unread messages one at a time chronologically with accept/dismiss per message
+- [x] 11.7 Add subtle system messages for `EventMeshNodeDiscovered` ("entered mesh range") and `EventMeshNodeLost` ("signal lost") in conversation pane
+- [x] 11.8 Write tests for overlay rendering, accept/dismiss state transitions, and unread banner flow
 
 ## 12. REPL Integration
 
-- [ ] 12.1 Add inline transmission notification to REPL loop in `cmd/dusty/main.go` — print ">>> INCOMING TRANSMISSION <<<" banner and `[y/n]` prompt
-- [ ] 12.2 Implement accept (print message, mark read) and dismiss (mark dismissed) flows in REPL mode
-- [ ] 12.3 Implement unread summary on activity resume in REPL mode
+- [x] 12.1 Add inline transmission notification to REPL loop in `cmd/dusty/main.go` — print ">>> INCOMING TRANSMISSION <<<" banner and `[y/n]` prompt
+- [x] 12.2 Implement accept (print message, mark read) and dismiss (mark dismissed) flows in REPL mode
+- [x] 12.3 Implement unread summary on activity resume in REPL mode
 
 ## 13. Configuration & Initialization
 
-- [ ] 13.1 Add `[mesh]` section to config schema in `internal/config/config.go`: enabled, serial port, baud rate, node ID, PSK, heartbeat interval, discovery timeout, peer TTL, queue size, rate limit, idle timeout, message retention limit, interaction history limit
-- [ ] 13.2 Add mesh config to `configs/` TOML template file with documented defaults
-- [ ] 13.3 Wire mesh subsystem initialization in `cmd/dusty/main.go`: create transport, registry, peer memory, message store, discovery, notifier; start receive loop; register mesh_send and mesh_inbox tools (gated on `mesh.enabled`)
-- [ ] 13.4 Inject GPS stub and haptic stub into mesh and notification subsystems via config
+- [x] 13.1 Add `[mesh]` section to config schema in `internal/config/config.go`: enabled, serial port, baud rate, node ID, PSK, heartbeat interval, discovery timeout, peer TTL, queue size, rate limit, idle timeout, message retention limit, interaction history limit
+- [x] 13.2 Add mesh config to `configs/` TOML template file with documented defaults
+- [x] 13.3 Wire mesh subsystem initialization in `cmd/dusty/main.go`: create transport, registry, peer memory, message store, discovery, notifier; start receive loop; register mesh_send and mesh_inbox tools (gated on `mesh.enabled`)
+- [x] 13.4 Inject GPS stub and haptic stub into mesh and notification subsystems via config
 
 ## 14. Integration Testing & Documentation
 
-- [ ] 14.1 Write integration test: full send/receive cycle using mock serial (encode → queue → send → receive → decode → store → notify)
-- [ ] 14.2 Write integration test: discovery handshake between two mock nodes with peer memory auto-seeding
-- [ ] 14.3 Write integration test: message lifecycle (receive → unread → dismiss → replay via inbox → read)
-- [ ] 14.4 Write integration test: idle period → messages queued → activity resume → unread banner
-- [ ] 14.5 Add mesh system prompt additions to persona system — instruct agent on terse message composition and mesh_inbox usage
+- [x] 14.1 Write integration test: full send/receive cycle using mock serial (encode → queue → send → receive → decode → store → notify)
+- [x] 14.2 Write integration test: discovery handshake between two mock nodes with peer memory auto-seeding
+- [x] 14.3 Write integration test: message lifecycle (receive → unread → dismiss → replay via inbox → read)
+- [x] 14.4 Write integration test: idle period → messages queued → activity resume → unread banner
+- [x] 14.5 Add mesh system prompt additions to persona system — instruct agent on terse message composition and mesh_inbox usage

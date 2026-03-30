@@ -153,8 +153,12 @@ func (a *Agent) buildMessages() ([]*schema.Message, error) {
 	// Pre-allocate: system message + all history.
 	messages := make([]*schema.Message, 0, 1+len(history))
 
-	// System prompt from persona.
-	messages = append(messages, schema.SystemMessage(a.persona.SystemPrompt))
+	// System prompt from persona, with optional mesh addendum.
+	systemPrompt := a.persona.SystemPrompt
+	if len(MeshTools) > 0 {
+		systemPrompt += MeshSystemPromptAddendum
+	}
+	messages = append(messages, schema.SystemMessage(systemPrompt))
 
 	// Conversation history.
 	for _, msg := range history {

@@ -2,12 +2,14 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/tristanj/dusty/internal/agent"
 	"github.com/tristanj/dusty/internal/config"
+	"github.com/tristanj/dusty/internal/notify"
 	"github.com/tristanj/dusty/internal/state"
 )
 
@@ -29,15 +31,27 @@ type App struct {
 	commands     CommandHandler
 	transmission TransmissionOverlay
 
-	// Mesh peer registry for resolving node names in notifications.
-	// Nil when mesh is disabled.
+	// Mesh dependencies — nil when mesh is disabled.
 	meshRegistry meshPeerLookup
+	meshStore    meshMessageStore
+	// recordActivity is called on every key press to update idle tracking.
+	recordActivity func()
+	// pendingIdleCount tracks idle-suppressed transmissions for the unread banner.
+	pendingIdleCount int
 
 	// Layout state
 	theme        Theme
 	width        int
 	height       int
 	agentState   state.AgentState
+}
+
+// MeshDeps holds optional mesh subsystem dependencies for the TUI.
+// All fields are nil-safe when mesh is disabled.
+type MeshDeps struct {
+	Registry       meshPeerLookup
+	MessageStore   meshMessageStore
+	RecordActivity func() // called on every key press for idle tracking
 }
 
 // NewApp creates the root TUI model. Call tea.NewProgram(NewApp(...)) to run.
@@ -47,25 +61,29 @@ func NewApp(
 	cfg *config.Config,
 	bus *state.EventBus,
 	voice VoiceController,
+	mesh MeshDeps,
 ) App {
 	theme := ThemeByName(cfg.Display.Theme)
 	appCtx, cancel := context.WithCancel(ctx)
 
 	return App{
-		agent:        a,
-		cfg:          cfg,
-		bus:          bus,
-		voice:        voice,
-		cmdCtx:       appCtx,
-		cancel:       cancel,
-		reasoning:    NewReasoningPane(theme),
-		conversation: NewConversationPane(cfg.Agent.Name, theme),
-		input:        NewInputComponent(theme),
-		settings:     NewSettingsOverlay(a, cfg, theme),
-		commands:     NewCommandHandler(a, cfg, voice),
-		transmission: NewTransmissionOverlay(theme),
-		theme:        theme,
-		agentState:   a.State(),
+		agent:          a,
+		cfg:            cfg,
+		bus:            bus,
+		voice:          voice,
+		cmdCtx:         appCtx,
+		cancel:         cancel,
+		reasoning:      NewReasoningPane(theme),
+		conversation:   NewConversationPane(cfg.Agent.Name, theme),
+		input:          NewInputComponent(theme),
+		settings:       NewSettingsOverlay(a, cfg, theme),
+		commands:       NewCommandHandler(a, cfg, voice),
+		transmission:   NewTransmissionOverlay(theme),
+		theme:          theme,
+		agentState:     a.State(),
+		meshRegistry:   mesh.Registry,
+		meshStore:      mesh.MessageStore,
+		recordActivity: mesh.RecordActivity,
 	}
 }
 
@@ -91,16 +109,34 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleSubmit(msg.Text)
 
 	case tea.KeyPressMsg:
+		// Track user activity for idle detection.
+		if m.recordActivity != nil {
+			m.recordActivity()
+		}
+
+		// Show unread banner when returning from idle.
+		if m.pendingIdleCount > 0 {
+			banner := m.unreadBanner()
+			m.conversation.AddSystemMessage(banner)
+			m.pendingIdleCount = 0
+		}
+
 		// Transmission overlay absorbs Enter and Esc when visible.
 		if m.transmission.Visible() {
 			switch msg.String() {
 			case "enter":
 				accepted := m.transmission.Accept()
+				if m.meshStore != nil {
+					_ = m.meshStore.MarkRead(accepted.ID)
+				}
 				m.conversation.AddSystemMessage(
 					m.theme.Primary.Render(">>> TRANSMISSION ACCEPTED <<<") +
 						"\n" + accepted.Value)
 			case "esc":
-				m.transmission.Dismiss()
+				dismissed := m.transmission.Accept() // hides overlay, returns message
+				if m.meshStore != nil {
+					_ = m.meshStore.MarkDismissed(dismissed.ID)
+				}
 				m.conversation.AddSystemMessage(
 					m.theme.Dimmed.Render("[transmission dismissed]"))
 			}
@@ -151,6 +187,18 @@ func (m App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settings.Toggle()
 			return m, nil
 
+		case "r", "R":
+			// Review unread transmissions (show oldest unread in overlay).
+			if m.meshStore != nil {
+				if unread := m.meshStore.ListUnread(); len(unread) > 0 {
+					msg := unread[0]
+					senderName, ownerName := resolvePeerInfo(m.meshRegistry, msg.SenderID)
+					m.transmission.Show(msg.ToMeshMessage(), senderName, ownerName)
+					m.transmission.SetWidth(m.width)
+					return m, nil
+				}
+			}
+
 		case "tab":
 			// Reserved for visual mode (Phase 4).
 			m.conversation.AddSystemMessage("[visual mode not yet available — coming in Phase 4]")
@@ -196,6 +244,12 @@ func (m App) handleEvent(ev state.Event) App {
 		m.reasoning.HandleEvent(ev)
 
 	case state.EventNotificationTriggered, state.EventMeshNodeDiscovered, state.EventMeshNodeLost:
+		// Track idle-suppressed messages for the unread banner.
+		if ev.Type == state.EventNotificationTriggered {
+			if p, ok := ev.Payload.(notify.NotificationPayload); ok && p.IsIdle {
+				m.pendingIdleCount++
+			}
+		}
 		showOverlay, sysMsg := HandleTransmissionEvent(ev, &m.transmission, m.meshRegistry)
 		if showOverlay {
 			m.transmission.SetWidth(m.width)
@@ -326,4 +380,28 @@ func (m App) View() tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
+}
+
+// unreadBanner returns the formatted unread messages banner shown on activity resume.
+func (m App) unreadBanner() string {
+	if m.meshStore == nil {
+		return ""
+	}
+	unread := m.meshStore.ListUnread()
+	if len(unread) == 0 {
+		return ""
+	}
+	// Collect unique sender names.
+	seen := make(map[string]struct{})
+	var senders []string
+	for _, msg := range unread {
+		name, _ := resolvePeerInfo(m.meshRegistry, msg.SenderID)
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			senders = append(senders, name)
+		}
+	}
+	senderList := strings.Join(senders, ", ")
+	banner := fmt.Sprintf("⚡ %d unread transmission(s) from %s  [R] Review  [any key] Continue", len(unread), senderList)
+	return m.theme.Accent.Render(banner)
 }

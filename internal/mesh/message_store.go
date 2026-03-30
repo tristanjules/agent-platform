@@ -32,6 +32,16 @@ type StoredMessage struct {
 	Status     MessageStatus `json:"status"`
 }
 
+// ToMeshMessage reconstructs a MeshMessage from the stored entry.
+func (sm StoredMessage) ToMeshMessage() MeshMessage {
+	return MeshMessage{
+		Type:   sm.MsgType,
+		ID:     sm.ID,
+		Sender: sm.SenderID,
+		Value:  sm.Content,
+	}
+}
+
 // MessageStore is a persistent inbox for all mesh messages.
 // Status lifecycle: unread → read, unread → dismissed, dismissed → read.
 type MessageStore struct {

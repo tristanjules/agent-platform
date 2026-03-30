@@ -3,6 +3,8 @@ package mesh
 import (
 	"log"
 	"time"
+
+	"github.com/tristanj/dusty/internal/state"
 )
 
 // DiscoveryConfig holds configuration for the discovery handshake and heartbeats.
@@ -17,16 +19,19 @@ type DiscoveryConfig struct {
 
 // Discovery manages the startup handshake, periodic heartbeats, and
 // heartbeat reception — updating the peer registry on each contact.
+// Non-discovery messages (msg, cmd, etc.) are forwarded to the EventBus
+// as EventMeshMessageReceived so the notifier and message store can handle them.
 type Discovery struct {
-	cfg      DiscoveryConfig
-	registry *PeerRegistry
+	cfg       DiscoveryConfig
+	registry  *PeerRegistry
 	transport *Transport
-	bus      interface{ Publish(interface{}) }
-	stopCh   chan struct{}
+	bus       *state.EventBus
+	stopCh    chan struct{}
 }
 
-// NewDiscovery creates a Discovery controller.
-func NewDiscovery(cfg DiscoveryConfig, registry *PeerRegistry, transport *Transport) *Discovery {
+// NewDiscovery creates a Discovery controller. The bus is used to publish
+// EventMeshMessageReceived for non-discovery message types.
+func NewDiscovery(cfg DiscoveryConfig, registry *PeerRegistry, transport *Transport, bus *state.EventBus) *Discovery {
 	if cfg.DiscoveryTimeout == 0 {
 		cfg.DiscoveryTimeout = 30 * time.Second
 	}
@@ -37,6 +42,7 @@ func NewDiscovery(cfg DiscoveryConfig, registry *PeerRegistry, transport *Transp
 		cfg:       cfg,
 		registry:  registry,
 		transport: transport,
+		bus:       bus,
 		stopCh:    make(chan struct{}),
 	}
 }
@@ -103,7 +109,9 @@ func (d *Discovery) heartbeatLoop() {
 	}
 }
 
-// receiveLoop processes incoming discovery and heartbeat messages.
+// receiveLoop processes incoming messages. Discovery/heartbeat/location
+// messages are handled internally; all other types are published to the
+// EventBus so the notifier, message store, and TUI can react.
 func (d *Discovery) receiveLoop() {
 	for {
 		select {
@@ -120,6 +128,12 @@ func (d *Discovery) receiveLoop() {
 				d.handleHeartbeat(msg)
 			case TypeLocation:
 				d.handleLocation(msg)
+			default:
+				// Forward non-discovery messages (msg, cmd, ack, syn, etc.)
+				// to the rest of the system via the event bus.
+				if d.bus != nil {
+					d.bus.Publish(state.NewEvent(state.EventMeshMessageReceived, msg))
+				}
 			}
 		}
 	}

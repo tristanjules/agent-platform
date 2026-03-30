@@ -155,6 +155,15 @@ type meshPeerLookup interface {
 	GetPeer(nodeID string) (mesh.PeerEntry, bool)
 }
 
+// meshMessageStore is the subset of MessageStore needed by the TUI for
+// accept/dismiss flows and the unread-on-resume banner.
+type meshMessageStore interface {
+	MarkRead(id string) error
+	MarkDismissed(id string) error
+	UnreadCount() int
+	ListUnread() []mesh.StoredMessage
+}
+
 func resolvePeerInfo(registry meshPeerLookup, nodeID string) (name, owner string) {
 	if registry == nil {
 		return nodeID, ""
