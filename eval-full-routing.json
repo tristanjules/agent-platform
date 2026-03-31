@@ -1,0 +1,105 @@
+{
+  "model": "llama3.2:1b",
+  "config_path": "configs/tool-test-llama.toml",
+  "cases_path": "testdata/eval/tool-calling-cases.yaml",
+  "runs_per_case_default": 5,
+  "timestamp": "2026-03-31T12:16:26.409752+02:00",
+  "cases": [
+    {
+      "name": "send_direct",
+      "prompt": "Send DUSTY-B the message hello",
+      "expected_tool": "mesh_send",
+      "min_success_rate": 0.75,
+      "runs": 10,
+      "successes": 10,
+      "rate": 1,
+      "pass": true
+    },
+    {
+      "name": "send_informal",
+      "prompt": "Tell dusty-b I'll be at the temple at sunset",
+      "expected_tool": "mesh_send",
+      "min_success_rate": 0.7,
+      "runs": 10,
+      "successes": 0,
+      "rate": 0,
+      "pass": false
+    },
+    {
+      "name": "send_with_punctuation",
+      "prompt": "Can you message DUSTY-C? Say: meet at the effigy burn, 9pm.",
+      "expected_tool": "mesh_send",
+      "min_success_rate": 0.7,
+      "runs": 10,
+      "successes": 9,
+      "rate": 0.9,
+      "pass": true
+    },
+    {
+      "name": "send_broadcast_intent",
+      "prompt": "Let the other agents know there's a dust storm coming",
+      "expected_tool": "mesh_send",
+      "min_success_rate": 0.6,
+      "runs": 10,
+      "successes": 4,
+      "rate": 0.4,
+      "pass": false
+    },
+    {
+      "name": "inbox_unread_check",
+      "prompt": "Do I have any unread messages?",
+      "expected_tool": "mesh_inbox",
+      "min_success_rate": 0.8,
+      "runs": 10,
+      "successes": 6,
+      "rate": 0.6,
+      "pass": false
+    },
+    {
+      "name": "inbox_check_informal",
+      "prompt": "What's in my inbox?",
+      "expected_tool": "mesh_inbox",
+      "min_success_rate": 0.8,
+      "runs": 10,
+      "successes": 3,
+      "rate": 0.3,
+      "pass": false
+    },
+    {
+      "name": "inbox_peer_history",
+      "prompt": "Show me my message history with DUSTY-B",
+      "expected_tool": "mesh_inbox",
+      "min_success_rate": 0.75,
+      "runs": 10,
+      "successes": 6,
+      "rate": 0.6,
+      "pass": false
+    },
+    {
+      "name": "current_time_direct",
+      "prompt": "What time is it?",
+      "expected_tool": "current_time",
+      "min_success_rate": 0.9,
+      "runs": 10,
+      "successes": 1,
+      "rate": 0.1,
+      "pass": false
+    },
+    {
+      "name": "no_tool_philosophical",
+      "prompt": "What is the meaning of the burn?",
+      "expected_tool": "",
+      "min_success_rate": 0,
+      "runs": 5,
+      "successes": 5,
+      "rate": 1,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total_cases": 9,
+    "passed_cases": 3,
+    "failed_cases": 6,
+    "overall_rate": 0.3333333333333333
+  }
+}

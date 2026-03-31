@@ -23,6 +23,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/tristanj/dusty/internal/agent"
+	"github.com/tristanj/dusty/internal/agent/classifier"
 	"github.com/tristanj/dusty/internal/config"
 	"github.com/tristanj/dusty/internal/state"
 )
@@ -105,6 +106,7 @@ func main() {
 
 	// Build eval agent (real Ollama, recording tools).
 	evalAgent := buildEvalAgent(cfg, toolSet)
+	defer evalAgent.Close()
 
 	// Run cases.
 	report := EvalReport{
@@ -210,7 +212,12 @@ func buildEvalAgent(cfg *config.Config, toolSet map[string]*agent.RecordingTool)
 		registry[name] = rt
 	}
 
-	return agent.NewAgentWithRegistry(cfg, bus, log, registry)
+	// Build classifier when enabled in config.
+	var cls classifier.Classifier
+	if cfg.Inference.Classifier.Enabled {
+		cls = classifier.NewRuleClassifier(nil)
+	}
+	return agent.NewAgentWithRegistry(cfg, bus, log, registry, cls)
 }
 
 // runCase executes one golden case `runs` times and returns the result.

@@ -1,0 +1,28 @@
+# DUSTY Tool Calling Test — Llama 3.2 1B (prompt improvements only, no classifier)
+# Tests the impact of few-shot prompt engineering without the classifier pipeline.
+
+[agent]
+name = "DUSTY"
+personality = "philosopher"
+wake_word = "hey dusty"
+max_history = 50
+
+[inference]
+mode = "local"
+
+[inference.local]
+provider = "ollama"
+model = "llama3.2:1b"
+endpoint = "http://localhost:11434"
+
+[inference.cloud]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+
+[memory]
+persist = false
+path = ""
+
+# Classifier disabled — testing prompt improvements only
+# [inference.classifier]
+# enabled = false

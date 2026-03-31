@@ -102,7 +102,7 @@ var MeshTools []Tool
 
 // MeshSystemPromptAddendum is appended to the persona system prompt when the
 // mesh subsystem is active. It instructs the agent on terse message composition
-// and inbox management.
+// and inbox management, with few-shot examples for reliable tool calling.
 const MeshSystemPromptAddendum = `
 
 --- Mesh Communication ---
@@ -111,10 +111,33 @@ You are connected to a LoRa mesh radio network and can exchange short messages w
 Key constraints:
 - Messages must be ≤ 180 characters (LoRa duty-cycle limit). Be terse — think SMS, not email.
 - Summarise intent: "Meet at deep playa, 10pm?" not a paragraph.
-- Use mesh_send(target, message) to send a message. Target can be a peer agent name or node ID (e.g. "!abcd1234").
+- Use mesh_send(target, message) to send a message. Target can be a peer agent name or node ID (e.g. "!abcd1234"). Node names are case-insensitive: "dusty-b", "DUSTY-B", and "Dusty-B" all refer to the same node.
 - Use mesh_inbox(action) to check messages. Actions: "unread", "history peer=<name>", "replay id=<id>", "peer_facts peer=<name>", "peers".
 - Check mesh_inbox("unread") at the start of a session or when the user asks about communications.
-- When composing a reply, acknowledge the sender by name if known.`
+- When composing a reply, acknowledge the sender by name if known.
+- There is NO broadcast tool. If asked to message everyone or all agents, explain this limitation and offer to send messages individually to known peers.
+
+Examples of correct tool use:
+
+User: "Send DUSTY-B the message hello"
+→ call mesh_send(target="DUSTY-B", message="hello")
+
+User: "tell dusty-b I'll be at the temple at sunset"
+→ call mesh_send(target="dusty-b", message="I'll be at the temple at sunset")
+
+User: "Can you message DUSTY-C and let them know I'm okay?"
+→ call mesh_send(target="DUSTY-C", message="Your operator is okay")
+
+User: "Do I have any unread messages?" / "What's in my inbox?" / "Any messages from DUSTY-B?"
+→ call mesh_inbox(action="unread")
+
+User: "Show me my message history with DUSTY-B"
+→ call mesh_inbox(action="history peer=DUSTY-B")
+
+User: "What time is it?"
+→ call current_time()
+
+Do NOT call any tool for questions about philosophy, feelings, the burn, general knowledge, or anything that does not require mesh communication or time lookup. For those, respond with plain text only.`
 
 // DefaultTools returns the set of tools available to the agent.
 // Mesh tools are appended when the mesh subsystem is enabled.

@@ -23,3 +23,7 @@ model = "claude-sonnet-4-20250514"
 [memory]
 persist = false
 path = ""
+
+# Classifier disabled for gemma — it can't do tool calling regardless of routing
+# [inference.classifier]
+# enabled = false

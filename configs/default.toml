@@ -19,6 +19,22 @@ provider = "anthropic"
 model = "claude-sonnet-4-20250514"
 # API key loaded from env: ANTHROPIC_API_KEY
 
+# ─── Intent Classifier (optional) ────────────────────────────────────────────
+# Enables pre-LLM intent classification and training data collection.
+# The classifier determines whether a message needs tool calling before it
+# reaches the model, enabling model-per-intent routing.
+#
+# Phase 1: set enabled=true with a single model to collect training data.
+# Phase 2: set tool_model + chat_model to route intents to specialised models.
+# Phase 3: replace the rule-based classifier with a fine-tuned model.
+#
+# [inference.classifier]
+# enabled = false
+# tool_model = "qwen2.5:1.5b"      # model used when tool call is detected
+# chat_model = "llama3.2:1b"        # model used for pure conversation
+# confidence_threshold = 0.7         # below this, use default model with tools
+# training_data_path = "data/training/tool_calls.jsonl"  # empty = disabled
+
 [audio]
 sample_rate = 16000
 channels = 1

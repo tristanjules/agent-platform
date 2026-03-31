@@ -24,3 +24,11 @@ model = "claude-sonnet-4-20250514"
 [memory]
 persist = false
 path = ""
+
+# Classifier routing: qwen for everything (baseline for tool-only model)
+[inference.classifier]
+enabled = true
+tool_model = "qwen2.5:1.5b"
+chat_model = "qwen2.5:1.5b"
+confidence_threshold = 0.7
+training_data_path = "data/training/tool_calls.jsonl"

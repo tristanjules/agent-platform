@@ -23,3 +23,11 @@ model = "claude-sonnet-4-20250514"
 [memory]
 persist = false
 path = ""
+
+# Classifier routing: llama as default, qwen for tool calls (best tool accuracy)
+[inference.classifier]
+enabled = true
+tool_model = "qwen2.5:1.5b"
+chat_model = "llama3.2:1b"
+confidence_threshold = 0.7
+training_data_path = "data/training/tool_calls.jsonl"

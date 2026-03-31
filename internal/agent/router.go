@@ -10,6 +10,7 @@ import (
 	einoollama "github.com/cloudwego/eino-ext/components/model/ollama"
 	"github.com/cloudwego/eino/components/model"
 
+	"github.com/tristanj/dusty/internal/agent/classifier"
 	"github.com/tristanj/dusty/internal/config"
 )
 
@@ -44,19 +45,26 @@ var toolCallingAllowlist = []string{
 	"phi3.5",
 }
 
+// defaultConfidenceThreshold is used when ClassifierConfig.ConfidenceThreshold is zero.
+const defaultConfidenceThreshold = 0.7
+
 // ModelRouter selects the appropriate ChatModel based on routing preference
 // and availability. It abstracts over local (Ollama) and cloud (Anthropic)
 // providers behind Eino's BaseChatModel interface.
 type ModelRouter interface {
-	// Route returns a BaseChatModel ready for inference.
+	// Route returns a BaseChatModel ready for inference using the configured preference.
 	Route(ctx context.Context) (model.BaseChatModel, error)
+	// RouteWithClassification returns a BaseChatModel selected based on the classifier
+	// result. When classifier routing is disabled or confidence is below threshold,
+	// it falls back to Route().
+	RouteWithClassification(ctx context.Context, result classifier.ClassifyResult) (model.BaseChatModel, error)
 	// SetPreference changes the routing strategy at runtime.
 	SetPreference(pref RoutingPreference)
 	// ListAvailable returns info on which models are configured.
 	ListAvailable() []ModelInfo
 	// SupportsToolCalling reports whether the currently active model is known
-	// to reliably support Ollama's tool calling protocol. Cloud routing always
-	// returns true. Local models are checked against the toolCallingAllowlist.
+	// to reliably support Ollama's tool calling protocol. When classifier routing
+	// is enabled, evaluates the tool model. Cloud routing always returns true.
 	SupportsToolCalling() bool
 }
 
@@ -83,11 +91,23 @@ func (r *router) SetPreference(pref RoutingPreference) {
 	r.preference = pref
 }
 
+func (r *router) confidenceThreshold() float64 {
+	t := r.cfg.Inference.Classifier.ConfidenceThreshold
+	if t <= 0 {
+		return defaultConfidenceThreshold
+	}
+	return t
+}
+
 func (r *router) SupportsToolCalling() bool {
 	if r.preference == PreferCloud {
 		return true
 	}
+	// When classifier routing is enabled, evaluate the tool model.
 	modelName := r.cfg.Inference.Local.Model
+	if r.cfg.Inference.Classifier.Enabled && r.cfg.Inference.Classifier.ToolModel != "" {
+		modelName = r.cfg.Inference.Classifier.ToolModel
+	}
 	for _, prefix := range toolCallingAllowlist {
 		if strings.HasPrefix(modelName, prefix) {
 			return true
@@ -117,36 +137,65 @@ func (r *router) ListAvailable() []ModelInfo {
 func (r *router) Route(ctx context.Context) (model.BaseChatModel, error) {
 	switch r.preference {
 	case PreferLocal:
-		return r.localModel(ctx)
+		return r.localModel(ctx, r.cfg.Inference.Local.Model)
 	case PreferCloud:
 		return r.cloudModel(ctx)
 	case PreferAuto:
-		m, err := r.localModel(ctx)
+		m, err := r.localModel(ctx, r.cfg.Inference.Local.Model)
 		if err == nil {
 			return m, nil
 		}
-		// Local unavailable — try cloud.
 		return r.cloudModel(ctx)
 	default:
-		return r.localModel(ctx)
+		return r.localModel(ctx, r.cfg.Inference.Local.Model)
 	}
 }
 
-// localModel creates an Ollama-backed ChatModel.
-func (r *router) localModel(_ context.Context) (model.BaseChatModel, error) {
+// RouteWithClassification selects a model based on the classifier result.
+// When classifier routing is disabled, or when cloud routing is active,
+// it delegates to Route(). When confidence is below threshold, it falls back
+// to the default local model with tools available (conservative).
+func (r *router) RouteWithClassification(ctx context.Context, result classifier.ClassifyResult) (model.BaseChatModel, error) {
+	cls := r.cfg.Inference.Classifier
+
+	// Cloud routing or classifier disabled — use standard routing.
+	if r.preference == PreferCloud || !cls.Enabled {
+		return r.Route(ctx)
+	}
+
+	// Below confidence threshold — use default model (conservative fallback).
+	if result.Confidence < r.confidenceThreshold() {
+		return r.localModel(ctx, r.cfg.Inference.Local.Model)
+	}
+
+	// Route based on classification.
+	if result.ShouldUseTool && cls.ToolModel != "" {
+		return r.localModel(ctx, cls.ToolModel)
+	}
+	if !result.ShouldUseTool && cls.ChatModel != "" {
+		return r.localModel(ctx, cls.ChatModel)
+	}
+
+	// Classifier enabled but no per-intent model configured — use default.
+	return r.localModel(ctx, r.cfg.Inference.Local.Model)
+}
+
+// localModel creates an Ollama-backed ChatModel for the given model name.
+func (r *router) localModel(_ context.Context, modelName string) (model.BaseChatModel, error) {
 	local := r.cfg.Inference.Local
-	if local.Endpoint == "" {
-		local.Endpoint = "http://localhost:11434"
+	endpoint := local.Endpoint
+	if endpoint == "" {
+		endpoint = "http://localhost:11434"
 	}
 
 	m, err := einoollama.NewChatModel(context.Background(), &einoollama.ChatModelConfig{
-		BaseURL: local.Endpoint,
-		Model:   local.Model,
+		BaseURL: endpoint,
+		Model:   modelName,
 		Timeout: 120 * time.Second,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating Ollama chat model (%s @ %s): %w",
-			local.Model, local.Endpoint, err)
+			modelName, endpoint, err)
 	}
 	return m, nil
 }

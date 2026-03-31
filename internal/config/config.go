@@ -25,9 +25,29 @@ type AgentConfig struct {
 
 // InferenceConfig controls model routing.
 type InferenceConfig struct {
-	Mode  string              `toml:"mode"` // "local", "cloud", "auto"
-	Local LocalInferenceConfig  `toml:"local"`
-	Cloud CloudInferenceConfig  `toml:"cloud"`
+	Mode       string                `toml:"mode"` // "local", "cloud", "auto"
+	Local      LocalInferenceConfig  `toml:"local"`
+	Cloud      CloudInferenceConfig  `toml:"cloud"`
+	Classifier ClassifierConfig      `toml:"classifier"`
+}
+
+// ClassifierConfig configures the intent classifier and training data collector.
+// All fields are optional — when Enabled is false the system behaves as before.
+type ClassifierConfig struct {
+	// Enabled activates intent-based routing and training data collection.
+	Enabled bool `toml:"enabled"`
+	// ToolModel is the Ollama model used when ShouldUseTool=true and Confidence >= threshold.
+	// Falls back to inference.local.model when empty.
+	ToolModel string `toml:"tool_model"`
+	// ChatModel is the Ollama model used when ShouldUseTool=false and Confidence >= threshold.
+	// Falls back to inference.local.model when empty.
+	ChatModel string `toml:"chat_model"`
+	// ConfidenceThreshold is the minimum confidence for model routing decisions.
+	// Below this value the default model is used with tools enabled (conservative fallback).
+	// Defaults to 0.7 when zero.
+	ConfidenceThreshold float64 `toml:"confidence_threshold"`
+	// TrainingDataPath is the file path for JSONL training data. Empty = disabled.
+	TrainingDataPath string `toml:"training_data_path"`
 }
 
 // LocalInferenceConfig configures the local (Ollama) inference backend.
@@ -142,6 +162,10 @@ func Defaults() Config {
 			Cloud: CloudInferenceConfig{
 				Provider: "anthropic",
 				Model:    "claude-sonnet-4-20250514",
+			},
+			Classifier: ClassifierConfig{
+				Enabled:             false,
+				ConfidenceThreshold: 0.7,
 			},
 		},
 		STT: STTConfig{

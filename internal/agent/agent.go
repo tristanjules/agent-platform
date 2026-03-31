@@ -14,6 +14,8 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 
+	"github.com/tristanj/dusty/internal/agent/classifier"
+	"github.com/tristanj/dusty/internal/agent/training"
 	"github.com/tristanj/dusty/internal/config"
 	"github.com/tristanj/dusty/internal/state"
 )
@@ -30,14 +32,28 @@ type Agent struct {
 	bus          *state.EventBus
 	log          *slog.Logger
 	toolRegistry map[string]Tool
+	classifier   classifier.Classifier
+	collector    *training.Collector
 }
 
 // NewAgentWithRegistry creates an Agent with a pre-built tool registry.
 // Used by the eval runner and integration tests to inject recording tools.
-func NewAgentWithRegistry(cfg *config.Config, bus *state.EventBus, log *slog.Logger, registry map[string]Tool) *Agent {
+// Pass a non-nil cls to enable classification; nil disables it.
+func NewAgentWithRegistry(cfg *config.Config, bus *state.EventBus, log *slog.Logger, registry map[string]Tool, cls classifier.Classifier) *Agent {
 	sm := state.NewStateMachine(state.StateWarmup, bus)
 	mem, _ := NewConversationMemory(cfg.Agent.MaxHistory, "")
 	sm.Transition(state.StateIdle) //nolint:errcheck
+
+	// Build training data collector when path is configured.
+	var collector *training.Collector
+	if cfg != nil && cfg.Inference.Classifier.TrainingDataPath != "" {
+		var err error
+		collector, err = training.New(cfg.Inference.Classifier.TrainingDataPath, log)
+		if err != nil {
+			log.Warn("training collector disabled", "err", err)
+		}
+	}
+
 	return &Agent{
 		cfg:          cfg,
 		router:       NewModelRouter(cfg),
@@ -47,6 +63,8 @@ func NewAgentWithRegistry(cfg *config.Config, bus *state.EventBus, log *slog.Log
 		bus:          bus,
 		log:          log,
 		toolRegistry: registry,
+		classifier:   cls,
+		collector:    collector,
 	}
 }
 
@@ -73,6 +91,20 @@ func NewAgent(cfg *config.Config, bus *state.EventBus, log *slog.Logger) (*Agent
 		registry[t.Name()] = t
 	}
 
+	// Build classifier when enabled.
+	var cls classifier.Classifier
+	if cfg.Inference.Classifier.Enabled {
+		cls = classifier.NewRuleClassifier(nil)
+	}
+
+	// Build training data collector when path is configured.
+	collector, err := training.New(cfg.Inference.Classifier.TrainingDataPath, log)
+	if err != nil {
+		log.Warn("training collector disabled: could not open file",
+			"path", cfg.Inference.Classifier.TrainingDataPath, "err", err)
+		collector = nil
+	}
+
 	a := &Agent{
 		cfg:          cfg,
 		router:       router,
@@ -82,6 +114,8 @@ func NewAgent(cfg *config.Config, bus *state.EventBus, log *slog.Logger) (*Agent
 		bus:          bus,
 		log:          log,
 		toolRegistry: registry,
+		classifier:   cls,
+		collector:    collector,
 	}
 
 	// Transition out of warmup.
@@ -100,9 +134,12 @@ func NewAgent(cfg *config.Config, bus *state.EventBus, log *slog.Logger) (*Agent
 // token strings. The channel is closed when the response is complete.
 // The caller must drain the channel to avoid goroutine leaks.
 //
-// When tools are registered, Chat runs a tool-calling loop (up to maxToolCallRounds)
-// before streaming the final natural-language response. Only the user message and
-// final assistant response are stored in ConversationMemory.
+// When a Classifier is configured, Chat classifies the message before routing
+// and gates tool schema injection on the result. When no Classifier is present,
+// the existing SupportsToolCalling() gate applies unchanged.
+//
+// Training data is recorded asynchronously after each call when a Collector
+// is configured.
 func (a *Agent) Chat(ctx context.Context, userMessage string) (<-chan string, error) {
 	if err := a.sm.Transition(state.StateThinking); err != nil {
 		return nil, fmt.Errorf("cannot start chat in current state (%s): %w",
@@ -115,6 +152,13 @@ func (a *Agent) Chat(ctx context.Context, userMessage string) (<-chan string, er
 	// Record user turn in memory.
 	a.memory.Add("user", userMessage)
 
+	// Classify before routing when a classifier is present.
+	var classifyResult classifier.ClassifyResult
+	hasClassifier := a.classifier != nil
+	if hasClassifier {
+		classifyResult = a.classifier.Classify(ctx, userMessage)
+	}
+
 	// Build the full message history for the LLM.
 	messages, err := a.buildMessages()
 	if err != nil {
@@ -123,10 +167,28 @@ func (a *Agent) Chat(ctx context.Context, userMessage string) (<-chan string, er
 	}
 
 	// Resolve the chat model via the router.
-	chatModel, err := a.router.Route(ctx)
+	var chatModel model.BaseChatModel
+	if hasClassifier {
+		chatModel, err = a.router.RouteWithClassification(ctx, classifyResult)
+	} else {
+		chatModel, err = a.router.Route(ctx)
+	}
 	if err != nil {
 		_ = a.sm.Transition(state.StateError)
 		return nil, fmt.Errorf("routing to model: %w\n\nMake sure Ollama is running: ollama serve", err)
+	}
+
+	// Determine the active model name for training data.
+	var activeModel string
+	if a.cfg != nil {
+		activeModel = a.cfg.Inference.Local.Model
+		if hasClassifier && a.cfg.Inference.Classifier.Enabled {
+			if classifyResult.ShouldUseTool && a.cfg.Inference.Classifier.ToolModel != "" {
+				activeModel = a.cfg.Inference.Classifier.ToolModel
+			} else if !classifyResult.ShouldUseTool && a.cfg.Inference.Classifier.ChatModel != "" {
+				activeModel = a.cfg.Inference.Classifier.ChatModel
+			}
+		}
 	}
 
 	tokens := make(chan string, 32)
@@ -135,12 +197,16 @@ func (a *Agent) Chat(ctx context.Context, userMessage string) (<-chan string, er
 		defer close(tokens)
 
 		var fullResponse string
+		var toolsCalled []string
+		toolSuccess := true
 
 		toolInfos := a.toolInfos()
-		if len(toolInfos) > 0 && a.router.SupportsToolCalling() {
-			fullResponse = a.runWithTools(ctx, chatModel, messages, toolInfos, tokens)
+		shouldInjectTools := a.shouldInjectTools(classifyResult, hasClassifier, toolInfos)
+
+		if shouldInjectTools {
+			fullResponse, toolsCalled, toolSuccess = a.runWithTools(ctx, chatModel, messages, toolInfos, tokens)
 		} else {
-			if len(toolInfos) > 0 {
+			if len(toolInfos) > 0 && !hasClassifier {
 				a.log.Warn("model does not support tool calling; falling back to text-only",
 					"model", a.cfg.Inference.Local.Model)
 			}
@@ -153,6 +219,9 @@ func (a *Agent) Chat(ctx context.Context, userMessage string) (<-chan string, er
 			a.bus.Publish(state.NewEvent(state.EventAgentResponse, fullResponse))
 		}
 
+		// Async training data collection.
+		a.collector.Record(userMessage, classifyResult, toolsCalled, toolSuccess, activeModel)
+
 		// Transition back to idle.
 		if err := a.sm.Transition(state.StateIdle); err != nil {
 			a.log.Warn("could not transition to idle after chat", "err", err)
@@ -163,15 +232,43 @@ func (a *Agent) Chat(ctx context.Context, userMessage string) (<-chan string, er
 	return tokens, nil
 }
 
+// shouldInjectTools determines whether to pass tool schemas to the model.
+//
+// With classifier:
+//   - ShouldUseTool=true  → inject tools (regardless of confidence; we want the model to act)
+//   - ShouldUseTool=false, high confidence → skip tools (clear conversation)
+//   - Low confidence → inject tools (conservative fallback)
+//
+// Without classifier: use SupportsToolCalling() as before.
+func (a *Agent) shouldInjectTools(result classifier.ClassifyResult, hasClassifier bool, toolInfos []*schema.ToolInfo) bool {
+	if len(toolInfos) == 0 {
+		return false
+	}
+	if !hasClassifier {
+		return a.router.SupportsToolCalling()
+	}
+
+	threshold := 0.7
+	if a.cfg != nil && a.cfg.Inference.Classifier.ConfidenceThreshold > 0 {
+		threshold = a.cfg.Inference.Classifier.ConfidenceThreshold
+	}
+
+	if result.ShouldUseTool {
+		return true
+	}
+	// ShouldUseTool=false: only skip tools when we're confident it's conversation.
+	return result.Confidence < threshold
+}
+
 // runWithTools executes the tool-calling loop using Generate() for intermediate rounds,
-// then streams the final response. Returns the full final response text.
+// then streams the final response. Returns the full final response text, tools called, and success.
 func (a *Agent) runWithTools(
 	ctx context.Context,
 	chatModel model.BaseChatModel,
 	messages []*schema.Message,
 	toolInfos []*schema.ToolInfo,
 	tokens chan<- string,
-) string {
+) (string, []string, bool) {
 	opts := []model.Option{
 		model.WithTools(toolInfos),
 		model.WithToolChoice(schema.ToolChoiceAllowed),
@@ -179,27 +276,30 @@ func (a *Agent) runWithTools(
 
 	loopMsgs := messages
 	toolsWereCalled := false
+	var allToolsCalled []string
+	toolSuccess := true
 
 	for round := 0; round < maxToolCallRounds; round++ {
 		resp, err := chatModel.Generate(ctx, loopMsgs, opts...)
 		if err != nil {
 			a.log.Error("tool-calling Generate error", "round", round, "err", err)
 			a.bus.Publish(state.NewEvent(state.EventAgentError, err))
-			return ""
+			return "", allToolsCalled, false
 		}
 
 		if len(resp.ToolCalls) == 0 {
 			// No tool calls — final response from Generate().
 			if toolsWereCalled {
 				// Tools were invoked; stream the final response properly.
-				return a.runStream(ctx, chatModel, loopMsgs, opts, tokens)
+				resp := a.runStream(ctx, chatModel, loopMsgs, opts, tokens)
+				return resp, allToolsCalled, toolSuccess
 			}
 			// No tools called at all — emit the Generate() text as tokens.
 			if resp.Content != "" {
 				tokens <- resp.Content
 				a.bus.Publish(state.NewEvent(state.EventAgentTokens, resp.Content))
 			}
-			return resp.Content
+			return resp.Content, allToolsCalled, toolSuccess
 		}
 
 		toolsWereCalled = true
@@ -209,37 +309,44 @@ func (a *Agent) runWithTools(
 
 		// Execute each tool call and append results.
 		for _, tc := range resp.ToolCalls {
-			result := a.executeTool(tc)
+			allToolsCalled = append(allToolsCalled, tc.Function.Name)
+			result, execErr := a.executeTool(tc)
+			if execErr != nil {
+				toolSuccess = false
+			}
 			loopMsgs = append(loopMsgs, schema.ToolMessage(result, tc.ID))
 		}
 	}
 
 	// Max rounds hit — do a final stream with whatever context we have.
 	a.log.Warn("tool-calling max rounds reached", "max", maxToolCallRounds)
-	return a.runStream(ctx, chatModel, loopMsgs, opts, tokens)
+	resp := a.runStream(ctx, chatModel, loopMsgs, opts, tokens)
+	return resp, allToolsCalled, toolSuccess
 }
 
-// executeTool looks up and runs a tool by name. Returns the result string.
+// executeTool looks up and runs a tool by name. Returns the result string and any error.
 // Unknown tools and execution errors are returned as plain-text error strings
 // so the model can self-correct on the next round.
-func (a *Agent) executeTool(tc schema.ToolCall) string {
+func (a *Agent) executeTool(tc schema.ToolCall) (string, error) {
 	tool, ok := a.toolRegistry[tc.Function.Name]
 	if !ok {
-		return fmt.Sprintf("Unknown tool: %s", tc.Function.Name)
+		err := fmt.Errorf("unknown tool: %s", tc.Function.Name)
+		return err.Error(), err
 	}
 
 	var args map[string]any
 	if tc.Function.Arguments != "" {
 		if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
-			return fmt.Sprintf("Invalid tool arguments for %s: %s", tc.Function.Name, err)
+			errMsg := fmt.Sprintf("Invalid tool arguments for %s: %s", tc.Function.Name, err)
+			return errMsg, err
 		}
 	}
 
 	result, err := tool.Execute(args)
 	if err != nil {
-		return fmt.Sprintf("Tool %s error: %s", tc.Function.Name, err)
+		return fmt.Sprintf("Tool %s error: %s", tc.Function.Name, err), err
 	}
-	return result
+	return result, nil
 }
 
 // runStream calls Stream() and pipes tokens to the channel. Returns the full response.
@@ -352,8 +459,9 @@ func (a *Agent) ListModels() []ModelInfo {
 	return a.router.ListAvailable()
 }
 
-// Close saves memory to disk and cleans up resources.
+// Close saves memory to disk, flushes training data, and cleans up resources.
 func (a *Agent) Close() error {
+	a.collector.Close()
 	if err := a.memory.Save(); err != nil {
 		return fmt.Errorf("saving memory: %w", err)
 	}

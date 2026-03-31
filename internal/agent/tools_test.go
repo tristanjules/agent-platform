@@ -10,6 +10,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 
+	"github.com/tristanj/dusty/internal/agent/classifier"
 	"github.com/tristanj/dusty/internal/state"
 )
 
@@ -66,8 +67,8 @@ func TestExecuteTool_UnknownTool(t *testing.T) {
 		ID:       "tc1",
 		Function: schema.FunctionCall{Name: "nonexistent", Arguments: "{}"},
 	}
-	result := a.executeTool(tc)
-	if result != "Unknown tool: nonexistent" {
+	result, _ := a.executeTool(tc)
+	if result != "unknown tool: nonexistent" {
 		t.Errorf("unexpected result: %q", result)
 	}
 }
@@ -79,9 +80,12 @@ func TestExecuteTool_KnownTool(t *testing.T) {
 		ID:       "tc1",
 		Function: schema.FunctionCall{Name: "known", Arguments: "{}"},
 	}
-	result := a.executeTool(tc)
+	result, err := a.executeTool(tc)
 	if result != "hello" {
 		t.Errorf("expected 'hello', got %q", result)
+	}
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
 	}
 }
 
@@ -92,9 +96,12 @@ func TestExecuteTool_ToolError(t *testing.T) {
 		ID:       "tc1",
 		Function: schema.FunctionCall{Name: "broken", Arguments: "{}"},
 	}
-	result := a.executeTool(tc)
+	result, err := a.executeTool(tc)
 	if result == "" || result == "hello" {
 		t.Errorf("expected error string, got: %q", result)
+	}
+	if err == nil {
+		t.Error("expected non-nil error")
 	}
 }
 
@@ -242,9 +249,12 @@ type testRouter struct {
 }
 
 func (r *testRouter) Route(_ context.Context) (model.BaseChatModel, error) { return r.m, nil }
-func (r *testRouter) SetPreference(_ RoutingPreference)                     {}
-func (r *testRouter) ListAvailable() []ModelInfo                            { return nil }
-func (r *testRouter) SupportsToolCalling() bool                             { return true }
+func (r *testRouter) RouteWithClassification(_ context.Context, _ classifier.ClassifyResult) (model.BaseChatModel, error) {
+	return r.m, nil
+}
+func (r *testRouter) SetPreference(_ RoutingPreference)  {}
+func (r *testRouter) ListAvailable() []ModelInfo         { return nil }
+func (r *testRouter) SupportsToolCalling() bool          { return true }
 
 // testAgent builds a minimal Agent with the given model and extra tools.
 func testAgent(t *testing.T, m model.BaseChatModel, extra ...Tool) *Agent {
