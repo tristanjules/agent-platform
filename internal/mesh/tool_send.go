@@ -3,6 +3,8 @@ package mesh
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cloudwego/eino/schema"
 )
 
 // SendTool is the agent-callable mesh_send tool.
@@ -28,6 +30,26 @@ func NewSendTool(transport *Transport, registry *PeerRegistry, memory *PeerMemor
 }
 
 func (t *SendTool) Name() string { return "mesh_send" }
+
+func (t *SendTool) Params() map[string]*schema.ParameterInfo {
+	return map[string]*schema.ParameterInfo{
+		"target": {
+			Type:     schema.String,
+			Desc:     "Agent name (e.g. \"DUSTY-B\") or raw node ID (e.g. \"!abcd1234\").",
+			Required: true,
+		},
+		"message": {
+			Type:     schema.String,
+			Desc:     "Text to send. Keep under 100 characters.",
+			Required: true,
+		},
+		"type": {
+			Type:     schema.String,
+			Desc:     "Message type: \"msg\" (default) or \"cmd\".",
+			Required: false,
+		},
+	}
+}
 
 func (t *SendTool) Description() string {
 	return "Send a message to another DUSTY agent over the LoRa mesh radio. " +

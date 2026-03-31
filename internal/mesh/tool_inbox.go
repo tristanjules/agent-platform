@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/cloudwego/eino/schema"
 )
 
 // InboxTool is the agent-callable mesh_inbox tool.
@@ -20,6 +22,27 @@ func NewInboxTool(store *MessageStore, memory *PeerMemory, registry *PeerRegistr
 }
 
 func (t *InboxTool) Name() string { return "mesh_inbox" }
+
+func (t *InboxTool) Params() map[string]*schema.ParameterInfo {
+	return map[string]*schema.ParameterInfo{
+		"action": {
+			Type:     schema.String,
+			Desc:     "Action to perform.",
+			Enum:     []string{"unread", "history", "replay", "peer_facts", "peers"},
+			Required: false,
+		},
+		"peer": {
+			Type:     schema.String,
+			Desc:     "Agent name, required for \"history\" and \"peer_facts\" actions.",
+			Required: false,
+		},
+		"id": {
+			Type:     schema.String,
+			Desc:     "Message ID, required for \"replay\" action.",
+			Required: false,
+		},
+	}
+}
 
 func (t *InboxTool) Description() string {
 	return "Query the mesh message inbox and peer information. " +

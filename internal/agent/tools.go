@@ -3,22 +3,41 @@ package agent
 import (
 	"fmt"
 	"time"
+
+	"github.com/cloudwego/eino/schema"
 )
 
 // Tool defines an action the agent can invoke during conversation.
-// This is a placeholder interface for Phase 1 — full tool use
-// integration with Eino's tool calling comes in later phases.
 type Tool interface {
 	Name() string
 	Description() string
+	// Params returns the parameter schema for this tool.
+	// Returns nil for tools that take no parameters.
+	Params() map[string]*schema.ParameterInfo
 	Execute(args map[string]any) (string, error)
+}
+
+// ToolInfoAdapter converts a Tool into an Eino schema.ToolInfo for passing to the model.
+func ToolInfoAdapter(t Tool) *schema.ToolInfo {
+	params := t.Params()
+	info := &schema.ToolInfo{
+		Name: t.Name(),
+		Desc: t.Description(),
+	}
+	if params != nil {
+		info.ParamsOneOf = schema.NewParamsOneOfByParams(params)
+	}
+	return info
 }
 
 // TimeTool reports the current time. A simple tool for testing.
 type TimeTool struct{}
 
 func (t TimeTool) Name() string        { return "current_time" }
-func (t TimeTool) Description() string  { return "Returns the current date and time." }
+func (t TimeTool) Description() string { return "Returns the current date and time." }
+func (t TimeTool) Params() map[string]*schema.ParameterInfo {
+	return nil
+}
 func (t TimeTool) Execute(_ map[string]any) (string, error) {
 	return fmt.Sprintf("Current time: %s", time.Now().Format(time.RFC1123)), nil
 }
