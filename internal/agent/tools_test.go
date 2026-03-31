@@ -244,6 +244,7 @@ type testRouter struct {
 func (r *testRouter) Route(_ context.Context) (model.BaseChatModel, error) { return r.m, nil }
 func (r *testRouter) SetPreference(_ RoutingPreference)                     {}
 func (r *testRouter) ListAvailable() []ModelInfo                            { return nil }
+func (r *testRouter) SupportsToolCalling() bool                             { return true }
 
 // testAgent builds a minimal Agent with the given model and extra tools.
 func testAgent(t *testing.T, m model.BaseChatModel, extra ...Tool) *Agent {

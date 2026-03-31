@@ -1,0 +1,25 @@
+# DUSTY Tool Calling Test — Llama 3.2 1B
+# Llama 3.2 has native tool support from Meta. Good balance of speed and reliability.
+
+[agent]
+name = "DUSTY"
+personality = "philosopher"
+wake_word = "hey dusty"
+max_history = 50
+
+[inference]
+mode = "local"
+
+[inference.local]
+provider = "ollama"
+# Tool calling: GOOD — native Meta tool support
+model = "llama3.2:1b"
+endpoint = "http://localhost:11434"
+
+[inference.cloud]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+
+[memory]
+persist = false
+path = ""

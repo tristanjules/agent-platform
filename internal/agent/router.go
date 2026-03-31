@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	einoclaude "github.com/cloudwego/eino-ext/components/model/claude"
@@ -31,6 +32,18 @@ type ModelInfo struct {
 	Local    bool
 }
 
+// toolCallingAllowlist contains model name prefixes known to reliably support
+// Ollama's tool calling protocol. Conservative by design: models not listed
+// return false from SupportsToolCalling() until empirically validated.
+var toolCallingAllowlist = []string{
+	"qwen2.5",
+	"llama3.1",
+	"llama3.2",
+	"mistral",
+	"phi4",
+	"phi3.5",
+}
+
 // ModelRouter selects the appropriate ChatModel based on routing preference
 // and availability. It abstracts over local (Ollama) and cloud (Anthropic)
 // providers behind Eino's BaseChatModel interface.
@@ -41,6 +54,10 @@ type ModelRouter interface {
 	SetPreference(pref RoutingPreference)
 	// ListAvailable returns info on which models are configured.
 	ListAvailable() []ModelInfo
+	// SupportsToolCalling reports whether the currently active model is known
+	// to reliably support Ollama's tool calling protocol. Cloud routing always
+	// returns true. Local models are checked against the toolCallingAllowlist.
+	SupportsToolCalling() bool
 }
 
 type router struct {
@@ -64,6 +81,19 @@ func NewModelRouter(cfg *config.Config) ModelRouter {
 
 func (r *router) SetPreference(pref RoutingPreference) {
 	r.preference = pref
+}
+
+func (r *router) SupportsToolCalling() bool {
+	if r.preference == PreferCloud {
+		return true
+	}
+	modelName := r.cfg.Inference.Local.Model
+	for _, prefix := range toolCallingAllowlist {
+		if strings.HasPrefix(modelName, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *router) ListAvailable() []ModelInfo {

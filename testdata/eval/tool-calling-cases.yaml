@@ -1,0 +1,87 @@
+# DUSTY Tool Calling Eval — Golden Test Cases
+#
+# Fields:
+#   name:             human-readable case identifier
+#   prompt:           user message sent to the agent
+#   expected_tool:    tool name that should be invoked (empty string = no tool expected)
+#   min_success_rate: minimum fraction of runs that must invoke the expected tool (0.0–1.0)
+#   runs:             number of repetitions per eval run (higher = less noisy)
+#   notes:            (optional) rationale for this case
+#
+# Success rate guidance:
+#   0.9+  Very high confidence required (simple, unambiguous prompts)
+#   0.75  Standard threshold for mesh tool calls
+#   0.0   Used for "no tool" cases — separately check tool_was_not_called
+
+cases:
+
+  # ─── mesh_send ────────────────────────────────────────────────────────────
+
+  - name: send_direct
+    prompt: "Send DUSTY-B the message hello"
+    expected_tool: mesh_send
+    min_success_rate: 0.75
+    runs: 10
+    notes: "Direct, unambiguous send request. Baseline for mesh_send reliability."
+
+  - name: send_informal
+    prompt: "Tell dusty-b I'll be at the temple at sunset"
+    expected_tool: mesh_send
+    min_success_rate: 0.70
+    runs: 10
+    notes: "Informal phrasing. Tests whether the model maps 'tell' to mesh_send."
+
+  - name: send_with_punctuation
+    prompt: "Can you message DUSTY-C? Say: meet at the effigy burn, 9pm."
+    expected_tool: mesh_send
+    min_success_rate: 0.70
+    runs: 10
+    notes: "Contains punctuation and a colon in the message body."
+
+  - name: send_broadcast_intent
+    prompt: "Let the other agents know there's a dust storm coming"
+    expected_tool: mesh_send
+    min_success_rate: 0.60
+    runs: 10
+    notes: "Broadcast phrasing — target is ambiguous. Lower threshold, may not resolve cleanly."
+
+  # ─── mesh_inbox ───────────────────────────────────────────────────────────
+
+  - name: inbox_unread_check
+    prompt: "Do I have any unread messages?"
+    expected_tool: mesh_inbox
+    min_success_rate: 0.80
+    runs: 10
+    notes: "Simple unread check. Should reliably trigger mesh_inbox(action=unread)."
+
+  - name: inbox_check_informal
+    prompt: "What's in my inbox?"
+    expected_tool: mesh_inbox
+    min_success_rate: 0.80
+    runs: 10
+    notes: "Shorter, more casual form of the unread check."
+
+  - name: inbox_peer_history
+    prompt: "Show me my message history with DUSTY-B"
+    expected_tool: mesh_inbox
+    min_success_rate: 0.75
+    runs: 10
+    notes: "History query — should trigger mesh_inbox(action=history, peer=DUSTY-B)."
+
+  # ─── current_time ─────────────────────────────────────────────────────────
+
+  - name: current_time_direct
+    prompt: "What time is it?"
+    expected_tool: current_time
+    min_success_rate: 0.90
+    runs: 10
+    notes: "Simplest possible tool trigger. High threshold — should be very reliable."
+
+  # ─── no tool expected ─────────────────────────────────────────────────────
+
+  - name: no_tool_philosophical
+    prompt: "What is the meaning of the burn?"
+    expected_tool: ""
+    min_success_rate: 0.0
+    runs: 5
+    notes: "Philosophical question — should NOT trigger any tool call. Checked inverted: tool_call_rate must be < 0.3."

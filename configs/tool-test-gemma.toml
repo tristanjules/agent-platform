@@ -1,0 +1,25 @@
+# DUSTY Tool Calling Test — Gemma 3 1B
+# Use this config to baseline tool calling reliability with the default model.
+
+[agent]
+name = "DUSTY"
+personality = "philosopher"
+wake_word = "hey dusty"
+max_history = 50
+
+[inference]
+mode = "local"
+
+[inference.local]
+provider = "ollama"
+# Tool calling: UNRELIABLE — included for baseline comparison
+model = "gemma3:1b"
+endpoint = "http://localhost:11434"
+
+[inference.cloud]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+
+[memory]
+persist = false
+path = ""

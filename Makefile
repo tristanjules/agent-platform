@@ -1,5 +1,6 @@
-.PHONY: build build-noaudio build-voice build-pi run test test-all clean \
-        fmt vet lint deps \
+.PHONY: build build-noaudio build-voice build-pi run test test-all test-integration \
+        eval eval-compare \
+        clean fmt vet lint deps \
         build-whisper download-whisper-model download-piper
 
 BINARY_NAME  = dusty
@@ -47,6 +48,51 @@ test:
 # Run all tests including any that require hardware (skip in CI).
 test-all:
 	$(GO) test ./... -timeout 120s
+
+# Run integration tests against a real Ollama instance.
+# Requires: ollama serve (running locally).
+# Override model: DUSTY_TEST_MODEL=qwen2.5:1.5b make test-integration
+test-integration:
+	$(GO) test -tags integration -timeout 120s ./internal/agent/...
+
+# ─── Tool Calling Eval ───────────────────────────────────────────────────────
+# Measures tool calling success rate for a given model config.
+# Requires: ollama serve (running locally with the target model pulled).
+#
+# Single model eval:
+#   make eval CONFIG=configs/tool-test-qwen.toml
+#
+# Run against all three presets in sequence:
+#   make eval-compare
+eval:
+	$(GO) run ./cmd/eval/ \
+		--config $(CONFIG) \
+		--cases testdata/eval/tool-calling-cases.yaml \
+		--runs 5
+
+# Run eval against all three tool-test presets and print a comparison.
+eval-compare:
+	@echo "=== Running eval for all three model presets ==="
+	@echo ""
+	@echo "--- gemma3:1b (baseline) ---"
+	-$(GO) run ./cmd/eval/ \
+		--config configs/tool-test-gemma.toml \
+		--cases testdata/eval/tool-calling-cases.yaml \
+		--runs 5 --out eval-report-gemma.json
+	@echo ""
+	@echo "--- qwen2.5:1.5b ---"
+	-$(GO) run ./cmd/eval/ \
+		--config configs/tool-test-qwen.toml \
+		--cases testdata/eval/tool-calling-cases.yaml \
+		--runs 5 --out eval-report-qwen.json
+	@echo ""
+	@echo "--- llama3.2:1b ---"
+	-$(GO) run ./cmd/eval/ \
+		--config configs/tool-test-llama.toml \
+		--cases testdata/eval/tool-calling-cases.yaml \
+		--runs 5 --out eval-report-llama.json
+	@echo ""
+	@echo "Reports written to eval-report-*.json"
 
 # ─── whisper.cpp build ───────────────────────────────────────────────────────
 # Clones and builds libwhisper.a from source. Run once before build-voice.

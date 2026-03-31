@@ -1,0 +1,26 @@
+# DUSTY Tool Calling Test — Qwen 2.5 1.5B
+# Qwen 2.5 is specifically trained for function calling and structured output.
+# Recommended model for tool calling on Pi 5.
+
+[agent]
+name = "DUSTY"
+personality = "philosopher"
+wake_word = "hey dusty"
+max_history = 50
+
+[inference]
+mode = "local"
+
+[inference.local]
+provider = "ollama"
+# Tool calling: EXCELLENT — recommended for mesh tool use
+model = "qwen2.5:1.5b"
+endpoint = "http://localhost:11434"
+
+[inference.cloud]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+
+[memory]
+persist = false
+path = ""

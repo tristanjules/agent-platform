@@ -314,7 +314,51 @@ go test ./...      # Same, without verbose
 |---|---|
 | `internal/config` | Defaults, TOML loading, field overrides, `OLLAMA_HOST` env override |
 | `internal/state` | State machine valid/invalid transitions, callback firing, no-state-change on error, `EventBus` pub/sub, non-blocking on full channel, state changes emit bus events |
-| `internal/agent` | Memory add/retrieve, sliding window, clear, JSON round-trip persistence, graceful handling of missing file |
+| `internal/agent` | Memory add/retrieve, sliding window, clear, JSON round-trip persistence, tool calling loop, ToolInfoAdapter, SupportsToolCalling |
+
+### Testing Tool Calling
+
+Tool calling reliability varies significantly between models at 1B parameter scale. Use the following tools to measure and compare before deploying to the field.
+
+**Integration tests** — validate the full tool-calling path against a real Ollama instance:
+
+```bash
+# Requires: ollama serve (running locally)
+make test-integration
+
+# Test a specific model:
+DUSTY_TEST_MODEL=qwen2.5:1.5b make test-integration
+```
+
+Integration tests skip (don't fail) if Ollama is unavailable, so they're safe to run in CI with a self-hosted Pi runner.
+
+**Eval runner** — measure tool call success rate across golden test cases:
+
+```bash
+# Single model eval (default: gemma3:1b baseline):
+make eval CONFIG=configs/tool-test-gemma.toml
+
+# Compare all three presets side-by-side:
+make eval-compare
+```
+
+This writes `eval-report-*.json` files with per-case success rates and an overall pass/fail. Exit code 1 if any case fails its threshold.
+
+**Model presets** for A/B testing live in `configs/`:
+
+| Config | Model | Tool Calling |
+|--------|-------|-------------|
+| `configs/tool-test-gemma.toml` | `gemma3:1b` | UNRELIABLE (baseline) |
+| `configs/tool-test-qwen.toml` | `qwen2.5:1.5b` | EXCELLENT (recommended) |
+| `configs/tool-test-llama.toml` | `llama3.2:1b` | GOOD |
+
+Pull models before running: `ollama pull qwen2.5:1.5b && ollama pull llama3.2:1b`
+
+**Adding new golden cases** — edit `testdata/eval/tool-calling-cases.yaml`. Each case specifies:
+- `prompt`: natural language input
+- `expected_tool`: tool name that should be called (empty = no tool expected)
+- `min_success_rate`: fraction of runs that must succeed (0.0–1.0)
+- `runs`: repetitions per case (higher = less noisy, slower)
 
 ---
 

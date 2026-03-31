@@ -32,6 +32,24 @@ type Agent struct {
 	toolRegistry map[string]Tool
 }
 
+// NewAgentWithRegistry creates an Agent with a pre-built tool registry.
+// Used by the eval runner and integration tests to inject recording tools.
+func NewAgentWithRegistry(cfg *config.Config, bus *state.EventBus, log *slog.Logger, registry map[string]Tool) *Agent {
+	sm := state.NewStateMachine(state.StateWarmup, bus)
+	mem, _ := NewConversationMemory(cfg.Agent.MaxHistory, "")
+	sm.Transition(state.StateIdle) //nolint:errcheck
+	return &Agent{
+		cfg:          cfg,
+		router:       NewModelRouter(cfg),
+		memory:       mem,
+		persona:      GetPersona(cfg.Agent.Personality),
+		sm:           sm,
+		bus:          bus,
+		log:          log,
+		toolRegistry: registry,
+	}
+}
+
 // NewAgent creates and initializes the agent from the given config.
 // It loads conversation history from disk if persistence is configured.
 func NewAgent(cfg *config.Config, bus *state.EventBus, log *slog.Logger) (*Agent, error) {
@@ -119,9 +137,13 @@ func (a *Agent) Chat(ctx context.Context, userMessage string) (<-chan string, er
 		var fullResponse string
 
 		toolInfos := a.toolInfos()
-		if len(toolInfos) > 0 {
+		if len(toolInfos) > 0 && a.router.SupportsToolCalling() {
 			fullResponse = a.runWithTools(ctx, chatModel, messages, toolInfos, tokens)
 		} else {
+			if len(toolInfos) > 0 {
+				a.log.Warn("model does not support tool calling; falling back to text-only",
+					"model", a.cfg.Inference.Local.Model)
+			}
 			fullResponse = a.runStream(ctx, chatModel, messages, nil, tokens)
 		}
 

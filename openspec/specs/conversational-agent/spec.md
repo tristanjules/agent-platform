@@ -1,10 +1,10 @@
 # conversational-agent Specification
 
 ## Purpose
-TBD - created by archiving change phase-1-foundations. Update Purpose after archive.
+Orchestrates LLM inference, conversation memory, persona, state machine, and tool execution into a single streaming Chat interface. Supports a multi-round tool-calling loop before producing the final streamed response.
 ## Requirements
 ### Requirement: Agent exposes streaming Chat interface
-The agent SHALL accept a user message string and return a channel of string tokens that streams the LLM response incrementally. The channel SHALL be closed when the response is complete.
+The agent SHALL accept a user message string and return a channel of string tokens that streams the LLM response incrementally. The channel SHALL be closed when the response is complete. When registered tools are available, the agent SHALL pass tool schemas to the model and execute any tool calls before streaming the final response. The tool-calling loop is transparent to callers — they receive only the final streamed text.
 
 #### Scenario: Successful streaming chat
 - **WHEN** `agent.Chat(ctx, "hello")` is called while the agent is in Idle state
@@ -13,6 +13,10 @@ The agent SHALL accept a user message string and return a channel of string toke
 #### Scenario: Chat while not idle
 - **WHEN** `agent.Chat(ctx, message)` is called while the agent is in Thinking state
 - **THEN** an error is returned and no channel is produced
+
+#### Scenario: Chat with tool invocation
+- **WHEN** `agent.Chat(ctx, "send DUSTY-B a message saying hello")` is called with mesh tools registered
+- **THEN** the model receives tool schemas, may return a ToolCall, the tool is executed internally, and the final text response is streamed via the returned channel
 
 ### Requirement: Agent wires memory, persona, router, and state machine
 The agent SHALL compose `ConversationMemory`, `Persona`, `ModelRouter`, and `StateMachine` into a single coherent unit. Each `Chat()` call SHALL record the user message, query the LLM with the full history, record the assistant response, and publish lifecycle events to the `EventBus`.

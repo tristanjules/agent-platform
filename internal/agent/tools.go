@@ -42,6 +42,60 @@ func (t TimeTool) Execute(_ map[string]any) (string, error) {
 	return fmt.Sprintf("Current time: %s", time.Now().Format(time.RFC1123)), nil
 }
 
+// noopTool is a minimal Tool implementation that always returns "ok".
+// Used by the eval runner to provide placeholder tools without real infrastructure.
+type noopTool struct{ name string }
+
+func (n *noopTool) Name() string                              { return n.name }
+func (n *noopTool) Description() string                       { return n.name + " (noop)" }
+func (n *noopTool) Params() map[string]*schema.ParameterInfo { return nil }
+func (n *noopTool) Execute(_ map[string]any) (string, error) { return "ok", nil }
+
+// NewNoopTool returns a Tool that accepts any arguments and always returns "ok".
+func NewNoopTool(name string) Tool { return &noopTool{name: name} }
+
+// evalStub is a noop Tool with a proper description and parameter schema,
+// used by the eval runner to give the model enough context to call the tool.
+type evalStub struct {
+	name   string
+	desc   string
+	params map[string]*schema.ParameterInfo
+}
+
+func (e *evalStub) Name() string                              { return e.name }
+func (e *evalStub) Description() string                       { return e.desc }
+func (e *evalStub) Params() map[string]*schema.ParameterInfo { return e.params }
+func (e *evalStub) Execute(_ map[string]any) (string, error)  { return "ok", nil }
+
+// EvalToolStub returns a properly-described stub Tool for use in the eval harness.
+// For known tool names (mesh_send, mesh_inbox, current_time) it returns a stub
+// with the real schema. Unknown names fall back to NewNoopTool.
+func EvalToolStub(name string) Tool {
+	switch name {
+	case "mesh_send":
+		return &evalStub{
+			name: "mesh_send",
+			desc: "Send a text message to another DUSTY node on the LoRa mesh network.",
+			params: map[string]*schema.ParameterInfo{
+				"target":  {Type: schema.String, Desc: "Node ID or callsign of the recipient (e.g. DUSTY-B)", Required: true},
+				"message": {Type: schema.String, Desc: "Text content of the message (≤180 chars)", Required: true},
+			},
+		}
+	case "mesh_inbox":
+		return &evalStub{
+			name: "mesh_inbox",
+			desc: "Check the inbox for messages received over the LoRa mesh network.",
+			params: map[string]*schema.ParameterInfo{
+				"action": {Type: schema.String, Desc: `Inbox action: "unread", "history peer=<name>", "peers"`, Required: false},
+			},
+		}
+	case "current_time":
+		return TimeTool{}
+	default:
+		return NewNoopTool(name)
+	}
+}
+
 // MeshTools is an optional set of mesh communication tools. Non-nil when
 // mesh is enabled in config. Injected by the mesh subsystem at startup.
 var MeshTools []Tool
